@@ -8,4 +8,8 @@
     <UserSecretsId>5e6b281c-53a4-44e1-86e5-10ccc970a0aa</UserSecretsId>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Folder Include="Uploads\" />
+  </ItemGroup>
+
 </Project>

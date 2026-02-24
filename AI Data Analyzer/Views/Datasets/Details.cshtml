@@ -1,0 +1,206 @@
+﻿@model DatasetDetailsViewModel
+
+@{
+    ViewData["Title"] = "Dataset Details";
+    var previewLines = Model?.PreviewLines ?? new List<string>();
+}
+
+<div class="container py-4" style="max-width: 1100px;">
+    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+        <div>
+            <h2 class="mb-1">Dataset</h2>
+            <div class="text-muted">@Model.OriginalFileName</div>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" asp-controller="Datasets" asp-action="Upload">
+                Upload Another
+            </a>
+            <button class="btn btn-outline-primary" type="button" disabled title="Coming soon">
+                Generate Report
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted">Rows</div>
+                    <div class="fs-3 fw-semibold">@Model.RowCount</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted">Columns</div>
+                    <div class="fs-3 fw-semibold">@Model.ColumnCount</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted">Stored File</div>
+                    <div class="fw-semibold text-truncate">@Model.StoredFileName</div>
+                    <div class="small text-muted">Saved in /Uploads</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Left: Data preview + charts -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="fw-semibold">Preview</div>
+                        <span class="badge text-bg-light">First rows</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <tbody>
+                                @if (previewLines.Count == 0)
+                                {
+                                    <tr><td class="text-muted p-4">No preview data yet.</td></tr>
+                                }
+                                else
+                                {
+                                    foreach (var line in previewLines)
+                                    {
+                                        <tr>
+                                            @foreach (var cell in line.Split(Model.Delimiter))
+                                            {
+                                                <td>@cell</td>
+                                            }
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <div class="fw-semibold">Charts</div>
+                    <div class="small text-muted">Auto charts (Chart.js)</div>
+                </div>
+                <div class="card-body">
+
+                    @if (Model.NumericColumns != null && Model.NumericColumns.Any() && Model.NumericSeries != null && Model.NumericSeries.Any())
+                    {
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div class="fw-semibold">Line Chart</div>
+
+                            <select id="chartColumnSelect" class="form-select form-select-sm" style="max-width: 220px;">
+                                @foreach (var col in Model.NumericColumns)
+                                {
+                                    <option value="@col" selected="@(col == Model.SelectedChartColumn)">
+                                        @col
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div style="height:260px;">
+                            <canvas id="mainChart"></canvas>
+                        </div>
+
+                        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+                        <script>
+                            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SeriesLabels));
+                            const series = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.NumericSeries));
+                            const initialColumn = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SelectedChartColumn));
+
+                            const ctx = document.getElementById('mainChart');
+                            let chart;
+
+                            function renderChart(columnName) {
+                            const values = series[columnName] || [];
+
+                            if (chart) chart.destroy();
+
+                            chart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                            labels: labels,
+                            datasets: [{
+                            label: columnName,
+                            data: values,
+                            tension: 0.25
+                            }]
+                            },
+                            options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                            }
+                            });
+                            }
+
+                            // initial render
+                            renderChart(initialColumn);
+
+                            // dropdown change
+                            document.getElementById('chartColumnSelect').addEventListener('change', (e) => {
+                            renderChart(e.target.value);
+                            });
+                        </script>
+                    }
+                    else
+                    {
+                        <div class="text-muted">No numeric data available for charting yet.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: AI Insights panel -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="fw-semibold mb-2">Dataset Profile</div>
+
+                    <div class="mb-2">
+                        <strong>Total Missing Values:</strong> @Model.TotalMissingValues
+                    </div>
+
+                    <div class="mb-2">
+                        <strong>Numeric Columns:</strong>
+                        @string.Join(", ", Model.NumericColumns)
+                    </div>
+
+                    <div>
+                        <strong>Text Columns:</strong>
+                        @string.Join(", ", Model.TextColumns)
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <div class="fw-semibold">AI Insights</div>
+                    <div class="small text-muted">Summaries, anomalies, next steps</div>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary w-100 mb-2" type="button" disabled>
+                        Generate Insights (soon)
+                    </button>
+                    <div class="small text-muted">
+                        By default, we’ll send only dataset summaries and small samples to the AI (not the full raw file).
+                    </div>
+
+                    <hr />
+
+                    <div class="text-muted">
+                        No insights yet. Upload a dataset and generate insights.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

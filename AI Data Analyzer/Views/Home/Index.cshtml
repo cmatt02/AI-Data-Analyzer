@@ -1,8 +1,39 @@
 ﻿@{
-    ViewData["Title"] = "Home Page";
+    ViewData["Title"] = "AI Data Analyzer";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container py-5" style="max-width: 1100px;">
+    <div class="row align-items-center">
+        <div class="col-lg-6">
+            <h1 class="fw-bold mb-3">
+                AI Data Analyzer
+            </h1>
+            <p class="lead text-muted">
+                Upload datasets, explore trends, and generate AI-powered insights — all in one dashboard.
+            </p>
+
+            <div class="d-flex gap-2 mt-4">
+                <a class="btn btn-primary btn-lg"
+                       asp-controller="Datasets"
+                       asp-action="Upload">
+                    Upload a Dataset
+                </a>
+                <a class="btn btn-outline-secondary btn-lg"
+                       href="https://github.com/cmatt02/AI-Data-Analyzer"
+                       target="_blank">
+                    View on GitHub
+                </a>
+            </div>
+
+            <div class="mt-4 text-muted small">
+                Built with ASP.NET MVC (.NET 10), SQL Server, and AI-powered analysis.
+            </div>
+        </div>
+
+        <div class="col-lg-6 d-none d-lg-block">
+            <div class="border rounded p-4 text-center text-muted">
+                Screenshot / diagram placeholder
+            </div>
+        </div>
+    </div>
 </div>
