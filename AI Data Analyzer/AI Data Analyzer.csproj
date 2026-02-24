@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>AI_Data_Analyzer</RootNamespace>
+    <UserSecretsId>5e6b281c-53a4-44e1-86e5-10ccc970a0aa</UserSecretsId>
   </PropertyGroup>
 
 </Project>
