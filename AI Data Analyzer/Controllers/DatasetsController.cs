@@ -290,6 +290,7 @@ namespace AI_Data_Analyzer.Controllers
                 ColumnCount = headers.Length,
                 Headers = headers.ToList(),
                 PreviewLines = preview,
+                PreviewRows = allRows.Take(Math.Min(allRows.Count, 6)).ToList(),
 
                 MissingValuesPerColumn = missingPerColumn,
                 TotalMissingValues = missingPerColumn.Values.Sum(),
