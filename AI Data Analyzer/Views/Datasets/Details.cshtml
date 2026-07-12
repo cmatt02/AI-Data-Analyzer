@@ -15,7 +15,7 @@
             <a class="btn btn-outline-secondary" asp-controller="Datasets" asp-action="Upload">
                 Upload Another
             </a>
-            <button class="btn btn-outline-primary" type="button" disabled title="Coming soon">
+            <button id="generateReportBtn" class="btn btn-outline-primary" type="button">
                 Generate Report
             </button>
         </div>
@@ -41,9 +41,9 @@
         <div class="col-md-4">
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <div class="text-muted">Stored File</div>
-                    <div class="fw-semibold text-truncate">@Model.StoredFileName</div>
-                    <div class="small text-muted">Saved in /Uploads</div>
+                    <div class="text-muted">File</div>
+                    <div class="fw-semibold text-truncate">@Model.OriginalFileName</div>
+                    <div class="small text-muted">Processed in memory — not saved on the server.</div>
                 </div>
             </div>
         </div>
@@ -145,6 +145,12 @@
                             // initial render
                             renderChart(initialColumn);
 
+                            // expose current chart as an image for the report generator
+                            window.__getChartImage = function () {
+                                try { return chart ? chart.toBase64Image() : null; }
+                                catch (e) { return null; }
+                            };
+
                             // dropdown change
                             document.getElementById('chartColumnSelect').addEventListener('change', (e) => {
                             renderChart(e.target.value);
@@ -187,8 +193,8 @@
                     <div class="small text-muted">Summaries, anomalies, next steps</div>
                 </div>
                 <div class="card-body">
-                    <button class="btn btn-primary w-100 mb-2" type="button" disabled>
-                        Generate Insights (soon)
+                    <button id="generateInsightsBtn" class="btn btn-primary w-100 mb-2" type="button">
+                        Generate Insights
                     </button>
                     <div class="small text-muted">
                         By default, we’ll send only dataset summaries and small samples to the AI (not the full raw file).
@@ -196,11 +202,171 @@
 
                     <hr />
 
-                    <div class="text-muted">
-                        No insights yet. Upload a dataset and generate insights.
+                    <div id="insightsStatus" class="text-muted">
+                        No insights yet. Click “Generate Insights”.
                     </div>
+                    <div id="insightsOutput" class="mt-2" style="white-space: pre-wrap;"></div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <script>
+        (function () {
+            const btn = document.getElementById('generateInsightsBtn');
+            if (!btn) return;
+
+            const statusEl = document.getElementById('insightsStatus');
+            const outEl = document.getElementById('insightsOutput');
+
+            // Profile data serialized from the server-side model.
+            const payload = {
+                fileName: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.OriginalFileName)),
+                rowCount: @Model.RowCount,
+                columnCount: @Model.ColumnCount,
+                totalMissingValues: @Model.TotalMissingValues,
+                numericColumns: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.NumericColumns)),
+                textColumns: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TextColumns)),
+                missingValuesPerColumn: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MissingValuesPerColumn)),
+                sampleRows: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PreviewLines))
+                };
+
+            btn.addEventListener('click', async function () {
+            btn.disabled = true;
+            statusEl.textContent = 'Generating insights…';
+            outEl.textContent = '';
+
+            try {
+                const resp = await fetch('@Url.Action("Generate", "Insights")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                statusEl.textContent = (data && data.error) ? data.error : 'Could not generate insights.';
+                return;
+            }
+
+            statusEl.textContent = 'Insights:';
+            outEl.innerHTML = DOMPurify.sanitize(marked.parse(data.insights));
+                } catch (e) {
+                    statusEl.textContent = 'Network error. Please try again.';
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        })();
+
+        (function () {
+            const reportBtn = document.getElementById('generateReportBtn');
+            if (!reportBtn) return;
+
+            // Profile data from the server-side model.
+            const report = {
+                fileName: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.OriginalFileName)),
+                rowCount: @Model.RowCount,
+                columnCount: @Model.ColumnCount,
+                totalMissing: @Model.TotalMissingValues,
+                numericColumns: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.NumericColumns)),
+                textColumns: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TextColumns)),
+                missingPerColumn: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MissingValuesPerColumn))
+            };
+
+            function esc(s) {
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            reportBtn.addEventListener('click', function () {
+                // Snapshot the current chart, if one exists.
+                let chartImg = null;
+                if (typeof window.__getChartImage === 'function') {
+                    chartImg = window.__getChartImage();
+                }
+
+                // Reuse insights only if the user already generated them.
+                const insightsEl = document.getElementById('insightsOutput');
+                const insightsHtml = (insightsEl && insightsEl.innerHTML.trim().length > 0)
+                    ? insightsEl.innerHTML
+                    : '';
+                const hasInsights = insightsHtml.length > 0;
+
+                const missingRows = Object.keys(report.missingPerColumn).map(k =>
+                    `<tr><td>${esc(k)}</td><td>${esc(report.missingPerColumn[k])}</td></tr>`
+                ).join('');
+
+                const generatedAt = new Date().toLocaleString();
+
+                const html = `
+                    <!doctype html>
+                    <html>
+                    <head>
+                    <meta charset="utf-8">
+                    <title>Report — ${esc(report.fileName)}</title>
+                    <style>
+                      body { font-family: Segoe UI, Arial, sans-serif; color: #222; margin: 32px; }
+                      h1 { font-size: 22px; margin-bottom: 4px; }
+                      h2 { font-size: 15px; margin-top: 28px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+                      .muted { color: #666; font-size: 12px; }
+                      table { border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+                      td, th { border: 1px solid #ddd; padding: 4px 10px; text-align: left; }
+                      .stat { display: inline-block; margin-right: 24px; font-size: 13px; }
+                      .stat b { font-size: 18px; display: block; }
+                      img { max-width: 100%; border: 1px solid #eee; margin-top: 8px; }
+                      .insights { font-size: 13px; line-height: 1.5; }
+                      @@media print { body { margin: 0; } }
+                    </style>
+                    </head>
+                    <body>
+                      <h1>Dataset Report</h1>
+                      <div class="muted">${esc(report.fileName)} · generated ${esc(generatedAt)}</div>
+
+                      <h2>Overview</h2>
+                      <span class="stat"><b>${report.rowCount}</b> rows</span>
+                      <span class="stat"><b>${report.columnCount}</b> columns</span>
+                      <span class="stat"><b>${report.totalMissing}</b> missing values</span>
+
+                      <h2>Columns</h2>
+                      <div style="font-size:13px;">
+                        <b>Numeric:</b> ${report.numericColumns.map(esc).join(', ') || '—'}<br>
+                        <b>Text:</b> ${report.textColumns.map(esc).join(', ') || '—'}
+                      </div>
+
+                      <h2>Missing values per column</h2>
+                      <table><tr><th>Column</th><th>Missing</th></tr>${missingRows}</table>
+
+                      ${chartImg ? `<h2>Chart</h2><img src="${chartImg}" alt="chart">` : ''}
+
+                      <h2>AI Insights</h2>
+                      ${hasInsights ? `<div class="insights">${insightsHtml}</div>`
+                                    : `<div class="muted">No AI insights were generated for this dataset.</div>`}
+                    </` + `body>
+                    </` + `html>`;
+
+                const w = window.open('', '_blank');
+                if (!w) {
+                    alert('Please allow pop-ups to generate the report.');
+                    return;
+                }
+
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                w.location = url;
+
+                // Give the chart image a moment to load before printing.
+                w.onload = function () {
+                    setTimeout(function () {
+                        w.print();
+                        URL.revokeObjectURL(url);
+                    }, 300);
+                };
+            });
+        })();
+    </script>
+}
